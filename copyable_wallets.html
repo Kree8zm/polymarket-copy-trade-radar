@@ -1,0 +1,3449 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polymarket Copy-Trade Radar</title>
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg-color: var(--tg-theme-bg-color, #121214);
+      --card-bg: var(--tg-theme-secondary-bg-color, #1c1c1e);
+      --text-color: var(--tg-theme-text-color, #f2f2f7);
+      --hint-color: var(--tg-theme-hint-color, #8e8e93);
+      --accent-color: var(--tg-theme-button-color, #007aff);
+      --accent-text: var(--tg-theme-button-text-color, #ffffff);
+      --green: #30d158;
+      --yellow: #ffd60a;
+      --red: #ff453a;
+      --border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 12px;
+      max-width: 600px;
+      margin: 0 auto;
+      padding-bottom: 40px;
+    }
+
+    header {
+      margin-bottom: 16px;
+    }
+
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    header p {
+      font-size: 13px;
+      color: var(--hint-color);
+      margin-top: 2px;
+    }
+
+    .filter-pills {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+      scrollbar-width: none;
+    }
+
+    .filter-pills::-webkit-scrollbar {
+      display: none;
+    }
+
+    .pill {
+      background: var(--card-bg);
+      color: var(--hint-color);
+      border: 1px solid var(--border-color);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .pill.active {
+      background: var(--accent-color);
+      color: var(--accent-text);
+      border-color: var(--accent-color);
+    }
+
+    .wallet-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .wallet-card.top-pick {
+      border-color: rgba(48, 209, 88, 0.4);
+      background: linear-gradient(180deg, rgba(48, 209, 88, 0.08) 0%, var(--card-bg) 100%);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .wallet-id {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rank {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--hint-color);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .address {
+      font-size: 14px;
+      font-weight: 600;
+      font-family: ui-monospace, monospace;
+    }
+
+    .score-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-green { background: rgba(48, 209, 88, 0.15); color: var(--green); }
+    .badge-yellow { background: rgba(255, 214, 10, 0.15); color: var(--yellow); }
+    .badge-red { background: rgba(255, 69, 58, 0.15); color: var(--red); }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px;
+      border-radius: 10px;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--hint-color);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .stat-value {
+      font-size: 15px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .tooltip {
+      position: relative;
+      cursor: pointer;
+      display: inline-block;
+    }
+
+    .tooltip::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 130%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2c2c2e;
+      color: #ffffff;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 400;
+      border-radius: 6px;
+      white-space: normal;
+      width: 180px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .tooltip:hover::after, .tooltip:focus::after {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .bias-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .bias-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--hint-color);
+    }
+
+    .bias-bar {
+      height: 6px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      display: flex;
+    }
+
+    .bias-up { background: var(--green); height: 100%; }
+    .bias-down { background: var(--red); height: 100%; }
+
+    .actions-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 9px 0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--accent-color);
+      color: var(--accent-text);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-color);
+    }
+
+    .accordion-trigger {
+      background: none;
+      border: none;
+      color: var(--hint-color);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 4px 0 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .accordion-content {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border-color);
+    }
+
+    .accordion-content.open {
+      display: flex;
+    }
+
+    .warning-banner {
+      background: rgba(255, 69, 58, 0.12);
+      border: 1px solid rgba(255, 69, 58, 0.3);
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .excluded-list {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .excluded-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      padding: 8px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 6px;
+    }
+
+    .excluded-reason {
+      color: var(--red);
+      font-size: 11px;
+    }
+
+    .disclaimer {
+      font-size: 11px;
+      color: var(--hint-color);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(44, 44, 46, 0.95);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <header>
+      <h1>Copy-Trade Radar</h1>
+      <p>Ranked Polymarket traders matching BTC UP/DOWN playbook rules.</p>
+    </header>
+
+    <div class="filter-pills">
+      <button class="pill active" data-filter="all">All Top</button>
+      <button class="pill" data-filter="safe">🎯 Safe & Consistent</button>
+      <button class="pill" data-filter="profit">💰 Top Profit</button>
+      <button class="pill" data-filter="discipline">⚡ Entry &lt; $0.40</button>
+    </div>
+
+    <div id="wallets-container">
+      
+    <div class="wallet-card top-pick"
+         data-category="safe discipline profit"
+         data-pnl="727,316"
+         data-entry="0.00"
+         data-decay="1.3570">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#1</span>
+          <span class="address">0x9b4914...04a8</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (13.50x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$727,316</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x9b491485819135564450669aeadb2d85f7b104a8')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x9b491485819135564450669aeadb2d85f7b104a8" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$236,866</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">700</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="209,533"
+         data-entry="0.00"
+         data-decay="0.9289">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#2</span>
+          <span class="address">0x871886...5040</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (12.25x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$209,533</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x8718865882e085b764825b637788043c16185040')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x8718865882e085b764825b637788043c16185040" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$70,302</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">503</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="discipline profit"
+         data-pnl="199,523"
+         data-entry="0.00"
+         data-decay="0.7743">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#3</span>
+          <span class="address">0xff80bb...9b4d</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (12.08x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$199,523</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xff80bb23621f03fc6300808730316c78abe09b4d')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xff80bb23621f03fc6300808730316c78abe09b4d" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$35,652</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">530</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="150,021"
+         data-entry="0.00"
+         data-decay="4.2895">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#4</span>
+          <span class="address">0x74ef37...1ac6</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (11.92x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$150,021</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x74ef37655b2a0e1b57082e160a16fa2f23571ac6')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x74ef37655b2a0e1b57082e160a16fa2f23571ac6" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$93,060</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">949</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="122,318"
+         data-entry="0.00"
+         data-decay="1.5252">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#5</span>
+          <span class="address">0xc3237b...0171</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (11.71x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$122,318</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xc3237b58fbcfc71392142cfea1137a98f9640171')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xc3237b58fbcfc71392142cfea1137a98f9640171" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$34,733</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">427</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="discipline profit"
+         data-pnl="27,036"
+         data-entry="0.00"
+         data-decay="0.7611">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#6</span>
+          <span class="address">0xf76451...61e6</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (10.05x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$27,036</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xf7645160e55177945a6d0701fd7a5baf350e61e6')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xf7645160e55177945a6d0701fd7a5baf350e61e6" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$7,303</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">223</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="18,298"
+         data-entry="0.00"
+         data-decay="1.2739">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#7</span>
+          <span class="address">0xbff413...b609</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (9.81x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$18,298</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xbff41387582eb9696be6029bcabd83e12876b609')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xbff41387582eb9696be6029bcabd83e12876b609" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$4,758</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">534</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="41,848"
+         data-entry="0.00"
+         data-decay="1.9849">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#8</span>
+          <span class="address">0x0520cd...e4e0</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (9.26x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$41,848</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x0520cda068c73de753e316252b90476f56cbe4e0')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x0520cda068c73de753e316252b90476f56cbe4e0" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$24,357</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">174</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="7,164"
+         data-entry="0.00"
+         data-decay="1.3200">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#9</span>
+          <span class="address">0xb0fcea...ce0b</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (8.88x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$7,164</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xb0fcea24160139269e0af107811e33d99d6ece0b')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xb0fcea24160139269e0af107811e33d99d6ece0b" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$1,882</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">722</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="discipline profit"
+         data-pnl="9,386"
+         data-entry="0.00"
+         data-decay="0.5104">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#10</span>
+          <span class="address">0x2d0fbf...81aa</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (8.09x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$9,386</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x2d0fbf6995692cc56f21171a9993be04436a81aa')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x2d0fbf6995692cc56f21171a9993be04436a81aa" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$1,860</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">1382</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="1,218,508"
+         data-entry="0.00"
+         data-decay="3.3345">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#11</span>
+          <span class="address">0x7d6d24...2654</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (7.92x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$1,218,508</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x7d6d24d5d9393cc2dd566a95a1cccbe0aa882654')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x7d6d24d5d9393cc2dd566a95a1cccbe0aa882654" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$224,171</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">113</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="1,744"
+         data-entry="0.00"
+         data-decay="1.7854">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#12</span>
+          <span class="address">0x579c6a...ff45</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (7.46x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$1,744</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x579c6a6c89a3ceb3f96b990215c5cff382a9ff45')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x579c6a6c89a3ceb3f96b990215c5cff382a9ff45" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$840</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">214</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="750"
+         data-entry="0.00"
+         data-decay="1.5000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#13</span>
+          <span class="address">0x34a6ae...e544</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (6.62x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$750</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x34a6ae12ebbec3b958dc7dd22226db06cc2fe544')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x34a6ae12ebbec3b958dc7dd22226db06cc2fe544" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$2,152</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">818</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="607"
+         data-entry="0.00"
+         data-decay="1.5000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#14</span>
+          <span class="address">0x79dec0...db49</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (6.41x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$607</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x79dec022bc0be1c90a2e9efc91491cd8039edb49')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x79dec022bc0be1c90a2e9efc91491cd8039edb49" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$598</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">514</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="79,500"
+         data-entry="0.00"
+         data-decay="1.3868">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#15</span>
+          <span class="address">0x791e45...9bda</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (5.30x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$79,500</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x791e45264c99eecaeb095caea9ad863740d29bda')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x791e45264c99eecaeb095caea9ad863740d29bda" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$20,299</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">94</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe discipline profit"
+         data-pnl="34,355"
+         data-entry="0.00"
+         data-decay="1.2790">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#16</span>
+          <span class="address">0x578e35...c3c0</span>
+        </div>
+        <span class="score-badge badge-green">● Top Tier (3.60x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$34,355</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x578e354ae9365002ac8eea4baadbe9d8cf95c3c0')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x578e354ae9365002ac8eea4baadbe9d8cf95c3c0" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$12,661</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">69</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="0"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#17</span>
+          <span class="address">0x3471a8...f17e</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x3471a897e56a8d3621ca79af87dae4325977f17e')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x3471a897e56a8d3621ca79af87dae4325977f17e" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="-0"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#18</span>
+          <span class="address">0xbc62c4...c963</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$-0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xbc62c41ab7e90e19dc36ea26d78ef7b2cae9c963')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xbc62c41ab7e90e19dc36ea26d78ef7b2cae9c963" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">2</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="profit"
+         data-pnl="42,680"
+         data-entry="0.00"
+         data-decay="0.0854">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#19</span>
+          <span class="address">0xe16d3f...5e30</span>
+        </div>
+        <span class="score-badge badge-red">● Strategy Fading (0.00x)</span>
+      </div>
+      <div class="warning-banner">
+        ⚠️ Strategy Degrading (Edge Decay 0.09x)
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$42,680</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xe16d3f2a5807999b358affd9445c3a09e45e5e30')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xe16d3f2a5807999b358affd9445c3a09e45e5e30" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">17</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="0"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#20</span>
+          <span class="address">0x84cfff...2f63</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x84cfffc3f16dcc353094de30d4a45226eccd2f63')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x84cfffc3f16dcc353094de30d4a45226eccd2f63" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="58,125"
+         data-entry="0.00"
+         data-decay="2.4517">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#21</span>
+          <span class="address">0xc0f534...3d04</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$58,125</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xc0f5345be7d24194892f10627123ffe91c633d04')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xc0f5345be7d24194892f10627123ffe91c633d04" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">262</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="0"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#22</span>
+          <span class="address">0x204f72...5e14</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x204f72f35326db932158cba6adff0b9a1da95e14')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x204f72f35326db932158cba6adff0b9a1da95e14" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="profit"
+         data-pnl="68"
+         data-entry="0.00"
+         data-decay="-0.9119">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#23</span>
+          <span class="address">0x6485f4...a265</span>
+        </div>
+        <span class="score-badge badge-red">● Strategy Fading (0.00x)</span>
+      </div>
+      <div class="warning-banner">
+        ⚠️ Strategy Degrading (Edge Decay -0.91x)
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$68</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x6485f47d0344c03eb4340f985159f6eb2dcba265')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x6485f47d0344c03eb4340f985159f6eb2dcba265" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">764</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="1,288"
+         data-entry="0.00"
+         data-decay="124.0362">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#24</span>
+          <span class="address">0x40b12f...98d9</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$1,288</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x40b12ff0bcd86473c31a2e76d37fdc2754d298d9')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x40b12ff0bcd86473c31a2e76d37fdc2754d298d9" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$686</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">11</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="profit"
+         data-pnl="74,061"
+         data-entry="0.00"
+         data-decay="0.4071">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#25</span>
+          <span class="address">0x8c0b02...7aa5</span>
+        </div>
+        <span class="score-badge badge-red">● Strategy Fading (0.00x)</span>
+      </div>
+      <div class="warning-banner">
+        ⚠️ Strategy Degrading (Edge Decay 0.41x)
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$74,061</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x8c0b024c17831a0dde038547b7e791ae6a0d7aa5')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x8c0b024c17831a0dde038547b7e791ae6a0d7aa5" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$7,568</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">610</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="0"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#26</span>
+          <span class="address">0xde9f7f...d43c</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xde9f7f4e77a1595623ceb58e469f776257ccd43c')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xde9f7f4e77a1595623ceb58e469f776257ccd43c" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="2,511"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#27</span>
+          <span class="address">0x4f8a79...8a18</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$2,511</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x4f8a79421d164b9a04da95f2355e232035be8a18')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x4f8a79421d164b9a04da95f2355e232035be8a18" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">1</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="-958"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#28</span>
+          <span class="address">0xb54b00...0972</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$-958</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xb54b00cfa5953a57ade7be4fe8cb1f0b4ddb0972')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xb54b00cfa5953a57ade7be4fe8cb1f0b4ddb0972" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$-958</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">6</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="-3,590"
+         data-entry="0.00"
+         data-decay="-2.8711">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#29</span>
+          <span class="address">0x4e4203...49ed</span>
+        </div>
+        <span class="score-badge badge-red">● Strategy Fading (0.00x)</span>
+      </div>
+      <div class="warning-banner">
+        ⚠️ Strategy Degrading (Edge Decay -2.87x)
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$-3,590</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x4e4203102fd7bde55ce1bcf9f1ef222e251949ed')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x4e4203102fd7bde55ce1bcf9f1ef222e251949ed" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$644</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">101</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="40"
+         data-entry="0.00"
+         data-decay="5.2066">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#30</span>
+          <span class="address">0x93de84...6656</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$40</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x93de848120d6678bc282f0e0a80fcc081ab86656')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x93de848120d6678bc282f0e0a80fcc081ab86656" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$35</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">26</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="67"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#31</span>
+          <span class="address">0xaa3ccf...5607</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$67</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xaa3ccfe85303804f4471baebdbb19a8e1c0c5607')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xaa3ccfe85303804f4471baebdbb19a8e1c0c5607" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">2</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="-91"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#32</span>
+          <span class="address">0x1dcb49...7ecc</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$-91</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x1dcb49ab95000474d5575b506592ae8624f47ecc')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x1dcb49ab95000474d5575b506592ae8624f47ecc" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$-14</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">21</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="profit"
+         data-pnl="507"
+         data-entry="0.00"
+         data-decay="-0.0033">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#33</span>
+          <span class="address">0x2117ae...5c26</span>
+        </div>
+        <span class="score-badge badge-red">● Strategy Fading (0.00x)</span>
+      </div>
+      <div class="warning-banner">
+        ⚠️ Strategy Degrading (Edge Decay -0.00x)
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$507</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x2117ae94a97d69b78cbc81b6680a62deb1955c26')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x2117ae94a97d69b78cbc81b6680a62deb1955c26" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$1</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">35</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="profit"
+         data-pnl="13,714"
+         data-entry="0.00"
+         data-decay="0.7121">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#34</span>
+          <span class="address">0xfe787d...0319</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$13,714</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xfe787d2da716d60e8acff57fb87eb13cd4d10319')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xfe787d2da716d60e8acff57fb87eb13cd4d10319" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">16</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="118,544"
+         data-entry="0.00"
+         data-decay="1.8250">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#35</span>
+          <span class="address">0xcd30f4...f316</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$118,544</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xcd30f4698c6f5f3829893e68e183a8e5ea18f316')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xcd30f4698c6f5f3829893e68e183a8e5ea18f316" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$74,235</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">46</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="4,386"
+         data-entry="0.00"
+         data-decay="1.5000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#36</span>
+          <span class="address">0xbbd9de...de31</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$4,386</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xbbd9de1ad99315ebb306572f62d5825a4477de31')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xbbd9de1ad99315ebb306572f62d5825a4477de31" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$4,506</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">28</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="0"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#37</span>
+          <span class="address">0x019fd8...1d4e</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x019fd89b84f847d01cfabab8dd13c3f6d0e91d4e')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x019fd89b84f847d01cfabab8dd13c3f6d0e91d4e" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="492"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#38</span>
+          <span class="address">0xec9704...4361</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$492</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0xec9704a42ae179bc6657010a3b40dd79bbff4361')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0xec9704a42ae179bc6657010a3b40dd79bbff4361" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$492</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">1</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe profit"
+         data-pnl="460"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#39</span>
+          <span class="address">0x4cd16c...afdb</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$460</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x4cd16cff8381681a618b0062d3840c3dfaf9afdb')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x4cd16cff8381681a618b0062d3840c3dfaf9afdb" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$499</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">2</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-card"
+         data-category="safe"
+         data-pnl="-221"
+         data-entry="0.00"
+         data-decay="1.0000">
+      <div class="card-header">
+        <div class="wallet-id">
+          <span class="rank">#40</span>
+          <span class="address">0x4129ed...ea5e</span>
+        </div>
+        <span class="score-badge badge-red">● Low Consistency (0.00x)</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Realized Profit</span>
+          <span class="stat-value" style="color: var(--green);">+$-221</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Avg Entry Price
+            <span class="tooltip" data-tip="Average cost per share. Under $0.40 limits downside risk.">ⓘ</span>
+          </span>
+          <span class="stat-value">$0.00</span>
+        </div>
+      </div>
+      <div class="bias-container">
+        <div class="bias-header">
+          <span>Trade Bias</span>
+          <span>0% UP / 100% DOWN</span>
+        </div>
+        <div class="bias-bar">
+          <div class="bias-up" style="width: 0%;"></div>
+          <div class="bias-down" style="width: 100%;"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="copyAddress('0x4129ed4e7f42ae6c4da6639a72cb0f2d6380ea5e')">
+          📋 Copy Address
+        </button>
+        <a href="https://polymarket.com/profile/0x4129ed4e7f42ae6c4da6639a72cb0f2d6380ea5e" target="_blank" class="btn btn-secondary">
+          Inspect ↗
+        </a>
+      </div>
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        View Detailed Analysis ▾
+      </button>
+      <div class="accordion-content">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Held-out PnL (30%)
+              <span class="tooltip" data-tip="Out-of-sample profit on final 30% of trades to prevent curve-fitting.">ⓘ</span>
+            </span>
+            <span class="stat-value">+$-83</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier
+              <span class="tooltip" data-tip="Playbook bonus score based on entry prices and hold duration.">ⓘ</span>
+            </span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Closed Trades</span>
+            <span class="stat-value">964</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Strategy Multiplier</span>
+            <span class="stat-value">0.00x</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <details>
+      <summary>
+        <span>⚠️ Filtered / Excluded Wallets (24)</span>
+        <span style="font-size: 11px;">Tap to view</span>
+      </summary>
+      <div class="excluded-list">
+        
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x3471a8...f17e</span>
+          <span class="excluded-reason">insufficient sample (0<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xbc62c4...c963</span>
+          <span class="excluded-reason">insufficient sample (2<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xe16d3f...5e30</span>
+          <span class="excluded-reason">insufficient sample (17<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x84cfff...2f63</span>
+          <span class="excluded-reason">insufficient sample (0<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xc0f534...3d04</span>
+          <span class="excluded-reason">edge fails out-of-sample (held-out PnL <= 0)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x204f72...5e14</span>
+          <span class="excluded-reason">insufficient sample (0<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x6485f4...a265</span>
+          <span class="excluded-reason">edge fails out-of-sample (held-out PnL <= 0)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x40b12f...98d9</span>
+          <span class="excluded-reason">insufficient sample (11<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x8c0b02...7aa5</span>
+          <span class="excluded-reason">edge decay too severe (recent 0.41x of older, floor is 0.5)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xde9f7f...d43c</span>
+          <span class="excluded-reason">insufficient sample (0<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x4f8a79...8a18</span>
+          <span class="excluded-reason">insufficient sample (1<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xb54b00...0972</span>
+          <span class="excluded-reason">insufficient sample (6<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x4e4203...49ed</span>
+          <span class="excluded-reason">edge decay too severe (recent -2.87x of older, floor is 0.5)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x93de84...6656</span>
+          <span class="excluded-reason">insufficient sample (26<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xaa3ccf...5607</span>
+          <span class="excluded-reason">insufficient sample (2<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x1dcb49...7ecc</span>
+          <span class="excluded-reason">insufficient sample (21<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x2117ae...5c26</span>
+          <span class="excluded-reason">insufficient sample (35<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xfe787d...0319</span>
+          <span class="excluded-reason">insufficient sample (16<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xcd30f4...f316</span>
+          <span class="excluded-reason">insufficient sample (46<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xbbd9de...de31</span>
+          <span class="excluded-reason">insufficient sample (28<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x019fd8...1d4e</span>
+          <span class="excluded-reason">insufficient sample (0<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0xec9704...4361</span>
+          <span class="excluded-reason">insufficient sample (1<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x4cd16c...afdb</span>
+          <span class="excluded-reason">insufficient sample (2<50)</span>
+        </div>
+        <div class="excluded-item">
+          <span style="font-family: monospace;">0x4129ed...ea5e</span>
+          <span class="excluded-reason">edge fails out-of-sample (held-out PnL <= 0)</span>
+        </div>
+      </div>
+    </details>
+
+    <div class="disclaimer">
+      Read-only research report. Not financial advice. Always verify on Polymarket before copying live trades.
+    </div>
+
+  </div>
+
+  <!-- Toast Element -->
+  <div id="toast">Address copied to clipboard!</div>
+
+  <script>
+    // Initialize Telegram WebApp SDK
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    // Filter Pills Logic using data-category
+    const filterPills = document.querySelectorAll('.pill');
+    const walletCards = document.querySelectorAll('.wallet-card');
+
+    filterPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        filterPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const filter = pill.getAttribute('data-filter');
+        walletCards.forEach(card => {
+          if (filter === 'all') {
+            card.style.display = 'flex';
+          } else {
+            const cats = card.getAttribute('data-category') || '';
+            card.style.display = cats.includes(filter) ? 'flex' : 'none';
+          }
+        });
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.selectionChanged();
+        }
+      });
+    });
+
+    // Copy Address + Telegram Haptic & Toast
+    function copyAddress(address) {
+      navigator.clipboard.writeText(address).then(() => {
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.impactOccurred('light');
+        }
+        showToast("Address copied to clipboard!");
+      }).catch(err => {
+        console.error('Copy failed', err);
+      });
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2000);
+    }
+
+    // Accordion Toggle Logic
+    function toggleAccordion(button) {
+      const content = button.nextElementSibling;
+      const isOpen = content.classList.contains('open');
+      if (isOpen) {
+        content.classList.remove('open');
+        button.textContent = 'View Detailed Analysis ▾';
+      } else {
+        content.classList.add('open');
+        button.textContent = 'Hide Detailed Analysis ▴';
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.impactOccurred('soft');
+        }
+      }
+    }
+  </script>
+</body>
+</html>
